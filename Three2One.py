@@ -12,6 +12,7 @@
 
 from pathlib import Path
 from typing import List
+import argparse
 from osgeo import ogr
 import pandas as pd
 
@@ -127,13 +128,13 @@ def SaveFeaturesToInividualFineBasedOnMergedTable(merged_df:pd.DataFrame, layer_
     layer_counts = len(layer_paths)
     # Open all the existed feature classes
     input_datasets = [ogr.Open(str(layer_path),0) for layer_path in layer_paths]
-    print(f"Opened {layer_counts} datasets.")
+    # print(f"Opened {layer_counts} datasets.")
     # Get the layer of input_datasets
     input_layers = [input_dataset.GetLayer(0) for input_dataset in input_datasets]
-    print(f"Opened {layer_counts} layers.")
+    # print(f"Opened {layer_counts} layers.")
     # Get the wkt lists of the input layers
     geometry_wkt_lists = [GetGeometryWktList(input_layer) for input_layer in input_layers]
-    print(geometry_wkt_lists)
+    # print(geometry_wkt_lists)
     # Get the spatial reference of the first layer
     spatial_ref = input_layers[0].GetSpatialRef()
     geometry_type = input_layers[0].GetGeomType()
@@ -141,19 +142,19 @@ def SaveFeaturesToInividualFineBasedOnMergedTable(merged_df:pd.DataFrame, layer_
     # Iterate throught the merged table
     for index, row in merged_df.iterrows():
         # Create a new shapefile in the ExportDirectory
-        print(f"Processing {index} row...")
+        # print(f"Processing {index} row...")
         new_layer_name = f'{field_names[0]}_{str(row[field_names[0]])}' # e.g. SID1_1
-        print(f"Creating {new_layer_name}...")
+        # print(f"Creating {new_layer_name}...")
         new_dataset = ogr.GetDriverByName('ESRI Shapefile').CreateDataSource(str(ExportDirectory / f'{new_layer_name}.shp'))
         if new_dataset is None:
-            print('Failed to create the new feature.')
+            # print('Failed to create the new feature.')
             raise FileNotFoundError('Failed to create the new feature.')
         # create new layer
-        print("create new layer...")
+        # print("create new layer...")
         new_layer = new_dataset.CreateLayer(new_layer_name, spatial_ref, geometry_type)
         # Iterate through the input layers and copy the feature to the new layer
         for i_input_layer in range(layer_counts): 
-            print(f"Copying feature from {layer_paths[i_input_layer]}...")
+            # print(f"Copying feature from {layer_paths[i_input_layer]}...")
             # Write the geometry to the new feature
             featureDefn = new_layer.GetLayerDefn()
             new_feature = ogr.Feature(featureDefn)
@@ -174,10 +175,10 @@ def Three2One(layer_paths:List[Path], field_names:List[str], ExportDirectory:Pat
         ExportDirectory.mkdir(parents=True)
     # Read all input layers and create dataframes
     OID_names = [f'OID_{str(i)}' for i in range(len(layer_paths))]
-    attribute_dataframes = [ReadTableAsPandasDataframe(layer_path, field_name,new_oid_name) for layer_path, field_name,new_oid_name in zip(layer_paths, field_names,OID_names)]
+    attribute_dataframes = [ReadTableAsPandasDataframe(layer_path, field_name,new_oid_name) for layer_path, field_name,new_oid_name in zip(layer_paths, field_names, OID_names)]
     # Merge the dataframes
     merged_df = MergeDataframesUsingSpecificFieldName(attribute_dataframes, field_names)
-    print(merged_df)
+    # print(merged_df)
     # Save the features
     SaveFeaturesToInividualFineBasedOnMergedTable(merged_df, layer_paths, field_names, OID_names, ExportDirectory)
 
@@ -190,9 +191,21 @@ def Test_Three2One():
     ExportDirectory = Path(r'./TestFCs/TestExport')
     Three2One(layer_paths, field_names, ExportDirectory)
 
+def parse_arg():
+    parser = argparse.ArgumentParser(description='Three2One')
+    parser.add_argument('-i', type=Path, required=True, nargs='+', help='The paths of the feature classes.')
+    parser.add_argument('-n', type=str, required=True, nargs='+', help='The field names.')
+    parser.add_argument('-e', type=Path, required=True, help='The path of the export directory.')
+    args = parser.parse_args()
+    return args
+
 if __name__ == '__main__':
     # Test_ReadTableAsPandasDataframe() #OK
     # Test_MergeDataframesUsingSpecificFieldName() #OK!
     # Test_ThreeShpFileMergrTheAttributeTable() #OK!
-    Test_Three2One() 
-    pass
+    # Test_Three2One() 
+    args = parse_arg()
+    if len(args.i) == len(args.n):
+        Three2One(args.i, args.n, args.e)
+    else:
+        print('The number of input feature classes and field names should be the same.')
